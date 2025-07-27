@@ -16,26 +16,28 @@ export async function GET() {
   try {
     const result = await pool.query(
       `SELECT p.id, p.name, p.type, p.status, p.cost,
-              ST_AsGeoJSON(p.location) AS location,
-              r.id as region_id, r.name as region_name, r.code as region_code
+              ST_AsGeoJSON(p.location) AS geometry,
+              r.code as region_code
        FROM infrastructure_projects p
        JOIN regions r ON p.region_id = r.id
        ORDER BY p.id`
     );
-    const projects = result.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      status: row.status,
-      cost: parseFloat(row.cost),
-      region: {
-        id: row.region_id,
-        name: row.region_name,
-        code: row.region_code,
+    const features = result.rows.map((row: any) => ({
+      type: 'Feature',
+      properties: {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        status: row.status,
+        cost: parseFloat(row.cost),
+        region_code: row.region_code
       },
-      location: JSON.parse(row.location),
+      geometry: JSON.parse(row.geometry)
     }));
-    return NextResponse.json(projects);
+    return NextResponse.json({
+      type: 'FeatureCollection',
+      features
+    });
   } catch (err) {
     console.error('Error fetching infrastructure projects:', err);
     return new NextResponse('Failed to load projects', { status: 500 });

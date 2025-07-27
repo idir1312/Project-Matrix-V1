@@ -14,6 +14,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    const aggregate = searchParams.get('aggregate') === 'true';
+    if (aggregate) {
+      const result = await pool.query(
+        `SELECT year, SUM(value) as total FROM economy_gdp GROUP BY year ORDER BY year`
+      );
+      return NextResponse.json(result.rows.map((row: any) => ({year: row.year, total: parseFloat(row.total)})));
+    }
     const yearParam = searchParams.get('year');
     let year: number | null = null;
     if (yearParam) {
@@ -30,14 +37,14 @@ export async function GET(request: Request) {
       return new NextResponse('No GDP data available', { status: 404 });
     }
     const result = await pool.query(
-      `SELECT r.id, r.name, r.code, e.year, e.value
+      `SELECT r.id, r.name, r.code, e.value
        FROM economy_gdp e
        JOIN regions r ON e.region_id = r.id
        WHERE e.year = $1
        ORDER BY r.id`,
       [year]
     );
-    return NextResponse.json({ year, data: result.rows });
+    return NextResponse.json(result.rows);
   } catch (err) {
     console.error('Error fetching GDP:', err);
     return new NextResponse('Failed to load GDP data', { status: 500 });

@@ -1,11 +1,9 @@
 import axios from 'axios';
-import csvParser from 'csv-parser';
 import knexLib from 'knex';
-import AdmZip from 'adm-zip';
-import * as stream from 'stream';
 import knexConfig from '../knexfile.cjs';
+import AdmZip from 'adm-zip';
 import { execSync } from 'child_process';
-import * as fs from 'fs';
+import fs from 'fs';
 
 // This script demonstrates how to ingest open data into the console database.
 // It downloads a GeoJSON file for Algeria's administrative boundaries, a CSV
@@ -20,12 +18,9 @@ const knex = knexLib(knexConfig.development);
 
 async function ingest() {
   // Download and insert regions
-  const regionsUrl = 'https://data.humdata.org/dataset/3d17274d-0812-4b21-b87a-4854af4eb244/resource/34f317e5-7de9-4e1b-a457-91ab786dc952/download/dza_admbnda_unhcr2020_shp.zip';
+  const regionsUrl = 'https://raw.githubusercontent.com/sofiane-ouerfelli/Algerian-Administrative-Division/main/dz_provinces.geojson';
   const regionsResponse = await axios.get(regionsUrl, { responseType: 'arraybuffer' });
-  const regionsZip = new AdmZip(regionsResponse.data);
-  regionsZip.extractAllTo('./temp_shp', true);
-  execSync('ogr2ogr -f GeoJSON ./temp_regions.geojson ./temp_shp/dza_admbnda_adm1_unhcr2020.shp');
-  const regionsGeojson = JSON.parse(fs.readFileSync('./temp_regions.geojson', 'utf8'));
+  const regionsGeojson = JSON.parse(regionsResponse.data);
   for (const feature of regionsGeojson.features) {
     const { properties, geometry } = feature;
     await knex('regions').insert({
@@ -36,80 +31,41 @@ async function ingest() {
   }
   console.log('Regions inserted');
   // Cleanup
-  fs.rmSync('./temp_shp', { recursive: true });
   fs.unlinkSync('./temp_regions.geojson');
 
-  // GDP data from the World Bank. The API returns a zip file containing CSVs.
-  const gdpUrl =
-    'https://api.worldbank.org/v2/country/DZ/indicator/NY.GDP.MKTP.CD?downloadformat=csv';
-  const gdpResponse = await axios.get(gdpUrl, { responseType: 'arraybuffer' });
-  const gdpZip = new AdmZip(gdpResponse.data);
-  const zipEntries = gdpZip.getEntries();
-  const csvEntry = zipEntries.find(
-    (entry: AdmZip.IZipEntry) =>
-      entry.entryName.startsWith('API_') &&
-      entry.entryName.endsWith('.csv') &&
-      !entry.entryName.includes('Metadata')
-  );
-  if (!csvEntry) throw new Error('No CSV in zip');
-  console.log('GDP data downloaded');
-  const csvData = csvEntry.getData().toString('utf8');
-  const gdpData: any[] = [];
-  await new Promise((resolve, reject) => {
-    const readable = new stream.Readable();
-    readable._read = () => {};
-    readable.push(csvData);
-    readable.push(null);
-    readable
-      .pipe(csvParser())
-      .on('data', (row: any) => gdpData.push(row))
-      .on('end', resolve)
-      .on('error', reject);
-  });
-  console.log('ZIP entry found');
-  console.log('CSV data extracted');
+  // Insert demo GDP for 2010-2025
   const regions = await knex('regions').select('id');
-  for (const row of gdpData) {
-    const year = parseInt(row.Year, 10);
-    const nationalGdp = parseFloat(row.Value);
-    if (Number.isNaN(year) || Number.isNaN(nationalGdp)) continue;
-    const perRegion = nationalGdp / regions.length;
+  const years = Array.from({length: 16}, (_, i) => 2010 + i);
+  for (const year of years) {
     for (const region of regions) {
+      const value = Math.random() * 9000000000 + 1000000000;
       await knex('economy_gdp').insert({
         region_id: region.id,
         year,
-        value: perRegion + Math.random() * perRegion * 0.2 - perRegion * 0.1,
+        value,
       });
     }
   }
-  console.log('CSV parsed, rows:', gdpData.length);
-  console.log('GDP inserted');
+  console.log('Demo GDP inserted');
 
-  // Download and insert a sample of infrastructure projects. Here we use a
-  // dataset of health facilities. Only the first 10 are inserted for the
-  // demonstration. In practice you should process all features and assign
-  // region_id based on spatial intersection.
-  const healthUrl = 'https://data.humdata.org/dataset/1acd7dfd-d797-4922-b0f5-82db92440e30/resource/46e3367d-53f5-41a6-9aa4-4e5df3c5ce40/download/algeria.geojson';
-  const healthResponse = await axios.get(healthUrl);
-  const healthGeojson = healthResponse.data;
-  const sample = healthGeojson.features.slice(0, 10);
-  for (const feature of sample) {
-    const { properties, geometry } = feature;
-    const lon = geometry.coordinates[0];
-    const lat = geometry.coordinates[1];
+  // Insert 3 demo infrastructure projects
+  const demoProjects = [
+    {name: 'Demo Road', type: 'road', status: 'active', cost: 5000000, lon: 3, lat: 36},
+    {name: 'Demo Hospital', type: 'health', status: 'planned', cost: 10000000, lon: 0, lat: 28},
+    {name: 'Demo Power Plant', type: 'energy', status: 'completed', cost: 20000000, lon: 5, lat: 32},
+  ];
+  for (const proj of demoProjects) {
+    const randomRegion = regions[Math.floor(Math.random() * regions.length)];
     await knex('infrastructure_projects').insert({
-      name: properties.name || 'Sample Project',
-      type: 'health',
-      status: 'active',
-      cost: Math.random() * 1000000,
-      location: knex.raw('ST_SetSRID(ST_MakePoint(?, ?), 4326)', [lon, lat]),
-      region_id: 1,
+      name: proj.name,
+      type: proj.type,
+      status: proj.status,
+      cost: proj.cost,
+      location: knex.raw('ST_SetSRID(ST_MakePoint(?, ?), 4326)', [proj.lon, proj.lat]),
+      region_id: randomRegion.id,
     });
   }
-  console.log('Health data downloaded');
-  console.log('Projects inserted');
-
-  // Ingestion complete
+  console.log('Demo projects inserted');
 }
 
 ingest()

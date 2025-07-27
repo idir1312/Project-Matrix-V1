@@ -14,10 +14,10 @@ import useStore from '@/lib/store';
  * active domain or selected year trigger layer updates. See the API routes
  * in app/api for the server queries.
  */
-export default function Map() {
+export default function Map({ className }: { className?: string }) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const { activeDomain, selectedYear } = useStore();
+  const { activeDomain, selectedYear } = useStore() as { activeDomain: string; selectedYear: number };
 
   useEffect(() => {
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -48,6 +48,27 @@ export default function Map() {
               },
             });
           });
+        map.current!.on('mouseenter', 'regions-layer', () => {
+          map.current!.getCanvas().style.cursor = 'pointer';
+        });
+        map.current!.on('mouseleave', 'regions-layer', () => {
+          map.current!.getCanvas().style.cursor = '';
+        });
+        map.current!.on('click', 'regions-layer', async (e) => {
+          if (!e.features || e.features.length === 0) return;
+          const feature = e.features[0];
+          const { id, code, name } = feature.properties as { id: number; code: string; name: string };
+          const year = useStore.getState().selectedYear;
+          const gdpRes = await fetch(`/api/economy/gdp?year=${year}`);
+          if (!gdpRes.ok) return;
+          const gdpData = await gdpRes.json();
+          const gdp = gdpData.find((d: any) => d.code === code)?.value || 0;
+          const projRes = await fetch('/api/infrastructure/projects');
+          if (!projRes.ok) return;
+          const projData = await projRes.json();
+          const projectCount = projData.features.filter((f: any) => f.properties.region_code === code).length;
+          useStore.getState().setSelectedRegion({ id, code, name, gdp, projectCount });
+        });
       });
     }
 
@@ -67,6 +88,7 @@ export default function Map() {
         });
         expression.push('#888888');
         if (map.current.getLayer('regions-layer')) {
+          // @ts-ignore
           map.current.setPaintProperty('regions-layer', 'fill-color', expression);
         }
       } else if (activeDomain === 'infrastructure') {
@@ -92,7 +114,8 @@ export default function Map() {
             },
           });
         } else {
-          (map.current.getSource('projects') as any).setData(geojson);
+          // @ts-ignore
+          (map.current.getSource('projects') as mapboxgl.GeoJSONSource).setData(geojson);
         }
       }
     };
@@ -105,5 +128,5 @@ export default function Map() {
     };
   }, [activeDomain, selectedYear]);
 
-  return <div ref={mapContainer} style={{ height: '100vh', width: '100%' }} />;
+  return <div ref={mapContainer} className={className} style={{ height: '100%', width: '100%' }} />;
 }

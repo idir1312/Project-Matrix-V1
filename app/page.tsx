@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { useTheme } from 'next-themes';
 import Map from '@/components/Map';
 import useStore from '@/lib/store';
+import GdpChart from '@/components/GdpChart';
 
 /*
  * Home page of the console. It renders a sidebar containing the domain tabs,
@@ -15,7 +16,7 @@ import useStore from '@/lib/store';
  * routes and re‑renders the map layers accordingly.
  */
 export default function Home() {
-  const { activeDomain, setActiveDomain, selectedYear, setSelectedYear } = useStore();
+  const { activeDomain, setActiveDomain, selectedYear, setSelectedYear, selectedRegion } = useStore();
   const { setTheme } = useTheme();
 
   return (
@@ -31,7 +32,7 @@ export default function Home() {
           <label className="block text-sm font-medium mb-2">Year</label>
           <Slider
             min={2010}
-            max={2023}
+            max={2025}
             value={[selectedYear]}
             onValueChange={([val]) => setSelectedYear(val)}
           />
@@ -40,10 +41,21 @@ export default function Home() {
           <Switch onCheckedChange={(checked: boolean) => setTheme(checked ? 'dark' : 'light')} />
           <span className="text-sm">Dark Mode</span>
         </div>
-        <Card className="p-2 text-sm">Detail Panel (Click map)</Card>
+        <Card className="p-2 text-sm">
+          {selectedRegion ? (
+            <div>
+              <h3 className="font-bold">{selectedRegion.name}</h3>
+              <p>GDP: ${selectedRegion.gdp.toLocaleString()}</p>
+              <p>Projects: {selectedRegion.projectCount}</p>
+            </div>
+          ) : (
+            'Detail Panel (Click map)'
+          )}
+        </Card>
       </aside>
-      <main className="flex-1">
-        <Map />
+      <main className="flex-1 flex flex-col">
+        <Map className="flex-1" />
+        {activeDomain === 'economy' && <GdpChart />}
       </main>
     </div>
   );
