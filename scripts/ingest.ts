@@ -17,21 +17,20 @@ console.log('Script started');
 const knex = knexLib(knexConfig.development);
 
 async function ingest() {
-  // Download and insert regions
-  const regionsUrl = 'https://raw.githubusercontent.com/sofiane-ouerfelli/Algerian-Administrative-Division/main/dz_provinces.geojson';
-  const regionsResponse = await axios.get(regionsUrl, { responseType: 'arraybuffer' });
-  const regionsGeojson = JSON.parse(regionsResponse.data);
-  for (const feature of regionsGeojson.features) {
-    const { properties, geometry } = feature;
+  // Insert dummy regions
+  const wilayas = Array.from({length: 58}, (_, i) => ({
+    name: `Wilaya ${i+1}`,
+    code: `DZ-${String(i+1).padStart(2, '0')}`,
+  }));
+  for (const w of wilayas) {
     await knex('regions').insert({
-      name: properties.admin1Name_en || properties.name,
-      code: properties.admin1Pcode || properties.code,
-      geom: knex.raw('ST_GeomFromGeoJSON(?)', JSON.stringify(geometry)),
+      name: w.name,
+      code: w.code,
+      geom: knex.raw('ST_GeomFromText(\'MULTIPOLYGON(((0 0, 1 1, 1 0, 0 0)))\')'),
     });
   }
-  console.log('Regions inserted');
-  // Cleanup
-  fs.unlinkSync('./temp_regions.geojson');
+  console.log('Dummy regions inserted');
+  // No cleanup needed for local file
 
   // Insert demo GDP for 2010-2025
   const regions = await knex('regions').select('id');

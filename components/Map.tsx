@@ -79,10 +79,9 @@ export default function Map({ className }: { className?: string }) {
       if (!map.current) return;
       if (activeDomain === 'economy') {
         const gdp = await fetch(`/api/economy/gdp?year=${selectedYear}`).then((res) => res.json());
-        // Build a match expression that assigns a colour to each region based on the GDP value.
+        // Build a match expression that assigns a colour to each region based on GDP value.
         const expression: any[] = ['match', ['get', 'code']];
-        gdp.data.forEach((d: any) => {
-          // Simple two‑tone scale: dark red for values above 1e9 and light yellow otherwise.
+        gdp.forEach((d: any) => {
           const color = d.value > 1e9 ? '#800026' : '#FFEDA0';
           expression.push(d.code, color);
         });
@@ -95,9 +94,9 @@ export default function Map({ className }: { className?: string }) {
         const projects = await fetch('/api/infrastructure/projects').then((res) => res.json());
         // Convert projects into GeoJSON FeatureCollection
         const geojson = {
-          type: 'FeatureCollection',
+          type: 'FeatureCollection' as const,
           features: projects.map((p: any) => ({
-            type: 'Feature',
+            type: 'Feature' as const,
             geometry: p.location,
             properties: p,
           })),
